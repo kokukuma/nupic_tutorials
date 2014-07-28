@@ -1,2 +1,6 @@
 *.pyc
 *.pkl
+*.o
+hello.cpp
+netapi
+hello
