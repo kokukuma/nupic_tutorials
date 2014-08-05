@@ -7,19 +7,19 @@ OBJS = $(SRCS:.cpp=.o)
 
 INCDIR = -I include
 LIBDIR = -L lib
-LIBS = -lm
-
-TMP = hello
+LIBS = lib/libnupic_core.a
 
 RM:= rm
 CXX:= g++
-CXXFLAGS = -Wall -O2
+#CXXFLAGS = -Wall -O2
+CXXFLAGS =  -O2
 
-$(TARGET): $(OBJS) hello.o 
-	$(CXX) -o $@ $(OBJS) $(LIBDIR) $(LIBS)
+
+$(TARGET): $(OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LIBDIR) $(LIBS)
 
 $(OBJS): $(SRCS)
-	$(CXX) $(INCDIR) -c $(SRCS)
+	$(CXX) $(CXXFLAGS) $(INCDIR) -c $(SRCS)
 
 clean:
 	$(RM) $(OBJS) $(TARGET)
@@ -27,5 +27,5 @@ clean:
 
 hello: hello.o
 	$(CXX) -o hello hello.o
-helc:
+helloclean:
 	$(RM) hello.o hello
