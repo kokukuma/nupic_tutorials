@@ -66,6 +66,46 @@ CLASSIFIER_PARAMS = {
     "steps": '1'
 }
 
+class DataBuffer(object):
+    def __init__(self):
+        self.stack = []
+
+    def push(self, data):
+        assert len(self.stack) == 0
+        data = data.__class__(data)
+        self.stack.append(data)
+
+    def getNextRecordDict(self):
+        assert len(self.stack) > 0
+        return self.stack.pop()
+
+
+def createCategoryEncoder():
+    encoder = MultiEncoder()
+    encoder.addMultipleEncoders({
+        "gym": {
+            "type": "CategoryEncoder",
+            "fieldname": u"gym",
+            "name": u"gym",
+            "categoryList": ['Hornsby', 'Melbourne', 'Epping', 'Chadstone', 'North', 'Bondi', 'Pitt', 'Park', 'Canberra', 'Darlinghurst'],
+            "w": 21,
+            },
+        })
+    return encoder
+
+def createCategoryEncoder():
+    encoder = MultiEncoder()
+    encoder.addMultipleEncoders({
+        "gym": {
+            "type": "CategoryEncoder",
+            "fieldname": u"gym",
+            "name": u"gym",
+            "categoryList": ['Hornsby', 'Melbourne', 'Epping', 'Chadstone', 'North', 'Bondi', 'Pitt', 'Park', 'Canberra', 'Darlinghurst'],
+            "w": 21,
+            },
+        })
+    return encoder
+
 def createEncoder():
     # TODO: vector
     encoder = MultiEncoder()
@@ -103,7 +143,9 @@ def createNetwork(dataSource):
             json.dumps({"verbosity": 0}))
     sensor = network.regions["sensor"].getSelf()
     sensor.encoder = createEncoder()
-    sensor.dataSource = dataSource
+    sensor.disabledEncoder = createCategoryEncoder()
+    #sensor.dataSource = dataSource
+    sensor.dataSource = DataBuffer()
 
 
     # create spacial pooler region
@@ -197,7 +239,26 @@ def main():
 
 
     # TODO: ここの内容, OPFとの違いをちゃんと押さえる.
-    for calc_num in xrange(10000):
+    #for calc_num in xrange(10000):
+    f = open(trainFile, "rb")
+    csvReader = csv.reader(f)
+    csvReader.next()
+    csvReader.next()
+    csvReader.next()
+
+    #for calc_num in xrange(10000):
+    for calc_num, row in enumerate(csvReader):
+        gym = row[0]
+        timestamp = datetime.datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S.0")
+        consumption = float(row[3])
+        input_data = {
+                'timestamp': timestamp,
+                'consumption': consumption,
+                'gym': gym
+                }
+
+        sensorRegion.getSelf().dataSource.push(input_data)
+
         # TODO: このrunって実際何をやってるんだ? どこに書いてあるか探す.
         #       多分, 各Regionの_computeでやってることをまとめて実行してるのだと思う.
         network.run(1)
@@ -245,8 +306,8 @@ def main():
         print 'bottomUpIn', sorted(tp_bottomUpIn)[:10]
         tp_bottomUpOut = TPRegion.getOutputData("bottomUpOut").nonzero()[0]
         print 'bottomUpOut', tp_bottomUpOut[:10]
-        tp_topDownOut = TPRegion.getOutputData("topDownOut").nonzero()[0]
-        print 'topDownOut', tp_topDownOut[:10]
+        # tp_topDownOut = TPRegion.getOutputData("topDownOut").nonzero()[0]
+        # print 'topDownOut', tp_topDownOut[:10]
         # predictedColumns = TPRegion.getOutputData("lrnActiveStateT").nonzero()[0]
         # print 'lrnActiveStateT',predictedColumns[:10]
         # predictedColumns = TPRegion.getOutputData("anomalyScore").nonzero()[0]
@@ -262,15 +323,30 @@ def main():
 
         print
         print "==== Predict ===="
+        topdown_predict = TPRegion.getSelf()._tfdr.topDownCompute().copy().nonzero()[0]
+        print 'tp_topdown_predict', sorted(topdown_predict)[:10]
+        prevPredictedColumns = copy.deepcopy(topdown_predict)
+
         categoryIn = classifier.getInputData("categoryIn").nonzero()[0]
         print 'categoryIn', categoryIn[:10]
+
         cl_bottomUpIn = classifier.getInputData("bottomUpIn").nonzero()[0]
         print 'bottomUpIn', cl_bottomUpIn[:10]
-        enc_list  = sensorRegion.getSelf().encoder.getEncoderList()
-        bucketIdx = enc_list[0].getBucketIndices(consumption)[0]
+
+        # predict consumption
+        # enc_list  = sensorRegion.getSelf().encoder.getEncoderList()
+        # bucketIdx = enc_list[0].getBucketIndices(consumption)[0]
+        # classificationIn = {
+        #         'bucketIdx': bucketIdx,
+        #         'actValue': float(consumption)
+        #         }
+
+        # predict gym
+        enc_list  = sensorRegion.getSelf().disabledEncoder.getEncoderList()
+        bucketIdx = enc_list[0].getBucketIndices(gym)[0]
         classificationIn = {
                 'bucketIdx': bucketIdx,
-                'actValue': float(consumption)
+                'actValue': gym
                 }
         clResults = classifier.getSelf().customCompute(
                 recordNum=calc_num,
@@ -278,11 +354,12 @@ def main():
                 classification=classificationIn
                 )
         max_index = [i for i, j in enumerate(clResults[1] ) if j == max(clResults[1] )]
-        print 'predict value: ',clResults['actualValues'][max_index[0]]
+        print 'predict value: ', clResults['actualValues'][max_index[0]]
+        print 'actual value: ', gym
+        print
 
 
-
-
+        """
         print
         print "==== Other ===="
         # TODO: topdownの予測とclassifierの予測両方試す.
@@ -311,6 +388,7 @@ def main():
         activeLearnCells = TPRegion.getSelf()._tfdr.getLearnActiveStateT()
         size = activeLearnCells.shape[0] * activeLearnCells.shape[1]
         print 'ex.4 anomalyscore', activeLearnCells.reshape(size).nonzero()[0]
+        """
 
 
 
