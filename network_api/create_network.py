@@ -7,9 +7,9 @@ SP_PARAMS = {
     "spVerbosity": 0,
     "spatialImp": "cpp",
     "globalInhibition": 1,
-    "columnCount": 2048,
+    "columnCount": 2024,
     "inputWidth": 0,             # set later
-    "numActiveColumnsPerInhArea": 40,
+    "numActiveColumnsPerInhArea": 20,
     "seed": 1956,
     "potentialPct": 0.8,
     "synPermConnected": 0.1,
@@ -20,9 +20,11 @@ SP_PARAMS = {
 
 TP_PARAMS = {
     "verbosity": 0,
-    "columnCount": 2048,
-    "cellsPerColumn": 32,
-    "inputWidth": 2048,
+    "columnCount": 2024,
+    # "cellsPerColumn": 32,
+    # "cellsPerColumn": 70,
+    "cellsPerColumn": 100,
+    "inputWidth": 2024,
     "seed": 1960,
     "temporalImp": "cpp",
     "newSynapseCount": 20,
