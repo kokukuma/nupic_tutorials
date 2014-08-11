@@ -9,7 +9,7 @@ SP_PARAMS = {
     "globalInhibition": 1,
     "columnCount": 2048,
     "inputWidth": 0,             # set later
-    "numActiveColumnsPerInhArea": 20,
+    "numActiveColumnsPerInhArea": 40,
     "seed": 1956,
     "potentialPct": 0.8,
     "synPermConnected": 0.1,
@@ -50,6 +50,7 @@ def createVectorEncoder():
     you need delete [:] at l.298
     repos/nupic/build/release/lib/python2.7/site-packages/nupic/regions/RecordSensor.py
 
+    https://github.com/numenta/nupic/issues/727
     """
     encoder = MultiEncoder()
     encoder.addMultipleEncoders({

@@ -132,12 +132,19 @@ class FunctionRecogniter():
         print "output: ", SPRegion.getOutputData("bottomUpOut").nonzero()[0][:10]
         print
         print "==== TP layer ===="
-        print "input:  ", TPRegion.getInputData("bottomUpIn").nonzero()[0][:10]
-        print "output: ", TPRegion.getOutputData("bottomUpOut").nonzero()[0][:10]
+        print "input:  ", TPRegion.getInputData("bottomUpIn").nonzero()[0]
+        print "output: ", TPRegion.getOutputData("bottomUpOut").nonzero()[0]
         print
         print "==== Predict ===="
         print TPRegion.getSelf()._tfdr.topDownCompute().copy().nonzero()[0][:10]
         print
+
+    def debug(self, input_data):
+        TPRegion = self.network.regions["TP"]
+        tp_output = TPRegion.getOutputData("bottomUpOut").nonzero()[0]
+
+        if 23263 in tp_output:
+            print input_data
 
 
     def learn(self, input_data):
@@ -170,7 +177,10 @@ class FunctionRecogniter():
 
         self.network.regions["sensor"].getSelf().dataSource.push(input_data)
         self.network.run(1)
-        #self.layer_output(input_data)
+        if input_data["xy_value"] == [50.0, 50.0]:
+        #if input_data["xy_value"][0] == 10.0:
+            self.layer_output(input_data)
+        #self.debug(input_data)
 
         # learn classifier
         clResults = self._learn_classifier()
@@ -251,18 +261,16 @@ def main():
     # トレーニング
     for i in range(30):
         print i,
-        ftype = fd.romdom_choice()
-        data = fd.get_data(ftype)
-        for x, y in data:
-            input_data = {
-                    'xy_value': [x, y],
-                    'ftype': ftype
-                    }
-            #print i,input_data
-            recogniter.learn(input_data)
+        for ftype in fd.function_list.keys():
+            data = fd.get_data(ftype)
+            for x, y in data:
+                input_data = {
+                        'xy_value': [x, y],
+                        'ftype': ftype
+                        }
+                recogniter.learn(input_data)
 
-        # reset
-        recogniter.reset()
+            recogniter.reset()
 
 
     # TODO: 合わない原因を考える.
@@ -274,6 +282,7 @@ def main():
 
     # 予測1
     for ftype in fd.function_list.keys():
+        print ftype
         data = fd.get_data(ftype)
         for x, y in data:
             input_data = {
@@ -281,7 +290,7 @@ def main():
                     }
             inferences = recogniter.predict(input_data)
 
-            print [x,y], ftype, inferences['best']['value'], inferences['best']['prob']
+            #print [x,y], ftype, inferences['best']['value'], inferences['best']['prob']
 
     # # 予測2, fixed-sin
     # import numpy
