@@ -102,5 +102,31 @@ python sin_pyaudio.py
 ```
 
 ### classification
++ OPFを使って, 分類をしてみる.
++ 予測するときは, カテゴリを入力せずに予測するため, 
++ モデルでは classifierOnly=Trueとして, sensorには入力しないようにする.
++ これを使うと, cla-classifierでのみ使われる.
+```
+cd cla_classifier
+python run_class.py
+```
 
+### network_api
++ OPFを使わず, network apiを使ってみる.
++ [ここ](https://github.com/numenta/nupic/tree/master/examples/network)を参考にしている.
++ OPFの劣化コピーになってしまったが, 自前のネットワークを作ることは出来るようになった.
++ やってみたタスクは２つ.
+  + 予測 : 関数の予測
+  + 分類 : 単調増加/単調減少の分類
+```
+cd network_api
+python function_prediction.py
+python function_recognition.py
+```
+
+
+
+### network_api_cc
++ nupic.coreを動かしてみる.
++ ビルドは, [ここ](https://github.com/numenta/nupic.core)の通り.
 
