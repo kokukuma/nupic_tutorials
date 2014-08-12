@@ -112,17 +112,26 @@ python run_class.py
 ```
 
 ### network_api
-+ OPFを使わず, network apiを使ってみる.
-+ [ここ](https://github.com/numenta/nupic/tree/master/examples/network)を参考にしている.
-+ OPFの劣化コピーになってしまったが, 自前のネットワークを作ることは出来るようになった.
-+ やってみたタスクは２つ.
-  + 予測 : 関数の予測
-  + 分類 : 単調増加/単調減少の分類
++ 概要
+  + OPFを使わず, network apiを使ってみる.
+  + [ここ](https://github.com/numenta/nupic/tree/master/examples/network)を参考にしている.
+  + OPFの劣化コピーになってしまったが, 自前のネットワークを作ることは出来るようになった.
+  + やってみたタスクは, 分類と予測の２つ.
+
++ 実行方法
 ```
 cd network_api
 python function_prediction.py
-python function_recognition.py
 ```
+
++ 分類
+  + 単調増加関数/単調減少関数の(x,y)を入力として, どちらであるかを分類する.
+  + x=0, 100 に近づくほど, 単調増加/単調減少x,yの差が大きくなるので, よく判別できる.
+  + x=50付近では, 単調増加/単調減少の差が小さくなる. 
+  + 特にx=50のときは, 単調増加/単調減少どちらの場合でも, networkに入力される値は(50, 50)となるが,
+  + TPに記憶されている文脈で増加か減少かを判別することが出来る.
+![plus](network_api/result/plus.png)
+![minus](network_api/result/minus.png)
 
 
 
