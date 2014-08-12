@@ -1,6 +1,8 @@
 #!/usr/bin/python
 # coding: utf-8
 
+from pprint import pprint
+
 class function_data(object):
     """
     sample:
@@ -47,9 +49,10 @@ class function_data(object):
 class FunctionRecogniter():
 
     def __init__(self):
-        self._createNetwork()
+        self.classifier_encoder_list = {}
         self.run_number = 0
         self.prevPredictedColumns = None
+        self._createNetwork()
 
     def _createNetwork(self):
         from nupic.algorithms.anomaly import computeAnomalyScore
@@ -66,7 +69,9 @@ class FunctionRecogniter():
         sensor = self.network.regions["sensor"].getSelf()
         sensor.encoder         = cn.createVectorEncoder()
         #sensor.disabledEncoder = cn.createCategoryEncoder(['sin', 'linear', 'quadratic', 'step'])
-        sensor.disabledEncoder = cn.createCategoryEncoder(['plus', 'minus', 'flat'])
+        #sensor.disabledEncoder = cn.createCategoryEncoder(['plus', 'minus', 'flat'])
+        #sensor.disabledEncoder = cn.createScalarEncoder()
+
         sensor.dataSource      = cn.DataBuffer()
 
         # sp
@@ -82,8 +87,8 @@ class FunctionRecogniter():
                 json.dumps(cn.TP_PARAMS))
 
         self.network.link("SP", "TP", "UniformLink", "")
-        self.network.link("TP", "SP", "UniformLink", "",
-                srcOutput="topDownOut", destInput="topDownIn")
+        # self.network.link("TP", "SP", "UniformLink", "",
+        #         srcOutput="topDownOut", destInput="topDownIn")
 
         # # secound sp/tp layer
         # cn.SP_PARAMS["inputWidth"] = 512 * 32
@@ -100,12 +105,23 @@ class FunctionRecogniter():
 
 
         # classifier
+        cn.CLASSIFIER_PARAMS['steps'] = '0'
         self.network.addRegion("Classifier", "py.CLAClassifierRegion",
                 json.dumps(cn.CLASSIFIER_PARAMS))
-
         self.network.link("TP", "Classifier", "UniformLink", "")
-        self.network.link("sensor", "Classifier", "UniformLink", "",
-                srcOutput="categoryOut", destInput="categoryIn")
+        # self.network.link("sensor", "Classifier", "UniformLink", "",
+        #         srcOutput="categoryOut", destInput="categoryIn")
+        self.classifier_encoder_list["Classifier"]  = cn.createCategoryEncoder(['plus', 'minus', 'flat'])
+
+
+        cn.CLASSIFIER_PARAMS['steps'] = '1'
+        self.network.addRegion("Classifier_y", "py.CLAClassifierRegion",
+                json.dumps(cn.CLASSIFIER_PARAMS))
+        self.network.link("TP", "Classifier_y", "UniformLink", "")
+
+        self.classifier_encoder_list["Classifier_y"] = cn.createScalarEncoder()
+
+
 
         # initialize
         self.network.initialize()
@@ -126,6 +142,10 @@ class FunctionRecogniter():
         classifier = self.network.regions["Classifier"]
         classifier.setParameter('inferenceMode', True)
         classifier.setParameter('learningMode', True)
+
+        classifier_y = self.network.regions["Classifier_y"]
+        classifier_y.setParameter('inferenceMode', True)
+        classifier_y.setParameter('learningMode', True)
 
 
         # # setting secound layer
@@ -161,8 +181,8 @@ class FunctionRecogniter():
         print "output: ", SPRegion.getOutputData("bottomUpOut").nonzero()[0][:10]
         print
         print "==== TP layer ===="
-        print "input:  ", TPRegion.getInputData("bottomUpIn").nonzero()[0]
-        print "output: ", TPRegion.getOutputData("bottomUpOut").nonzero()[0]
+        print "input:  ", TPRegion.getInputData("bottomUpIn").nonzero()[0][:10]
+        print "output: ", TPRegion.getOutputData("bottomUpOut").nonzero()[0][:10]
         print
         # print "==== SP2 layer ===="
         # print "input:  ", SP2Region.getInputData("bottomUpIn").nonzero()[0][:10]
@@ -188,7 +208,11 @@ class FunctionRecogniter():
         """
         input_data = {'xy_value': [1.0, 2.0], 'ftype': 'sin'}
         """
+        # TODO: learn/predict, やってること同じだから一緒にする.
+        #       学習するかしないか. classifierに値渡すか渡さないか違いのみ.
+
         self.enable_learning_mode(True)
+        self.run_number += 1
 
         # calc encoder, SP, TP
         self.network.regions["sensor"].getSelf().dataSource.push(input_data)
@@ -197,20 +221,34 @@ class FunctionRecogniter():
 
 
         # learn classifier
-        clResults = self._learn_classifier(input_data['ftype'])
+        inferences = {}
+        inferences['Classifier']   = self._learn_classifier_multi("Classifier", actValue=input_data['ftype'], pstep=0)
+        inferences['Classifier_y'] = self._learn_classifier_multi("Classifier_y", input_data['xy_value'][1], pstep=1)
 
-        inferences = self._summay_clresult(clResults, 0)
-
-        #
+        # anomaly
         inferences["anomaly"] = self._calc_anomaly()
 
-        print 'actual value: ',input_data['xy_value'], input_data['ftype'], inferences['best']['value'], inferences["anomaly"], dict(inferences['likelihoodsDict'])
+        # print input_data['xy_value'], inferences['Classifier_y']['best']['value'], inferences['Classifier_y']['best']['prob']
+        # print 'actual value: ',input_data['xy_value'],
+        # print input_data['ftype'],
+        # print inferences['Classifier']['best']['value'],
+        # print inferences["anomaly"],
+        # print dict(inferences['Classifier']['likelihoodsDict'])
+
+        print "%10s, %10s, %10.6f, %10.6f, %5s, %5s" % (
+                input_data['xy_value'][0],
+                input_data['xy_value'][1],
+                inferences['Classifier']['likelihoodsDict']['plus'],
+                inferences['Classifier']['likelihoodsDict']['minus'],
+                input_data['ftype'], inferences['Classifier']['best']['value'])
+
         return inferences
 
 
     def predict(self, input_data):
         # calc encoder, SP, TP
         self.enable_learning_mode(False)
+        self.run_number += 1
 
         self.network.regions["sensor"].getSelf().dataSource.push(input_data)
         self.network.run(1)
@@ -220,23 +258,30 @@ class FunctionRecogniter():
         #self.debug(input_data)
 
         # learn classifier
-        clResults = self._learn_classifier()
-        inferences= self._summay_clresult(clResults, 0)
+        inferences = {}
+        inferences['Classifier']   = self._learn_classifier_multi("Classifier", actValue=None, pstep=0)
+        inferences['Classifier_y'] = self._learn_classifier_multi("Classifier_y", actValue=None, pstep=1)
+
+        # anomaly
         inferences["anomaly"] = self._calc_anomaly()
 
         return inferences
 
-    def _learn_classifier(self, ftype=None):
-        classifier     = self.network.regions["Classifier"]
-        #tp_bottomUpOut = self.network.regions["TP"].getOutputData("bottomUpOut").nonzero()[0]
-        tp_bottomUpOut = self.network.regions["TP"].getOutputData("bottomUpOut").nonzero()[0]
+    def _learn_classifier_multi(self, region_name, actValue=None, pstep=0):
 
-        if ftype is not None:
-            enc_list  = self.network.regions["sensor"].getSelf().disabledEncoder.getEncoderList()
-            bucketIdx = enc_list[0].getBucketIndices(ftype)[0]
+        # TODO: これはnetworkの中で計算できないのか?
+        #       regions/CLAClassifierRegion.py の getSpec/outputにもないし, 無理そうだな.
+
+        classifier     = self.network.regions[region_name]
+        encoder        = self.classifier_encoder_list[region_name].getEncoderList()[0]
+        tp_bottomUpOut = self.network.regions["TP"].getOutputData("bottomUpOut").nonzero()[0]
+        #tp_bottomUpOut = self.network.regions["TP"].getSelf()._tfdr.infActiveState['t'].reshape(-1).nonzero()[0]
+
+        if actValue is not None:
+            bucketIdx = encoder.getBucketIndices(actValue)[0]
             classificationIn = {
                     'bucketIdx': bucketIdx,
-                    'actValue': ftype
+                    'actValue': actValue
                     }
         else:
             classificationIn = {'bucketIdx': 0,'actValue': 'no'}
@@ -245,7 +290,9 @@ class FunctionRecogniter():
                 patternNZ=tp_bottomUpOut,
                 classification=classificationIn
                 )
-        return clResults
+
+        inferences= self._summay_clresult(clResults, pstep)
+        return inferences
 
     def _summay_clresult(self, clResults, steps):
         from collections import defaultdict
@@ -304,14 +351,14 @@ def main():
     # トレーニング
     for i in range(50):
         print i,
-        for ftype in fd.function_list.keys():
+        for num, ftype in enumerate(fd.function_list.keys()):
             data = fd.get_data(ftype)
             for x, y in data:
                 input_data = {
                         'xy_value': [x, y],
                         'ftype': ftype
                         }
-                recogniter.learn(input_data)
+                inferences = recogniter.learn(input_data)
 
             recogniter.reset()
 
@@ -332,8 +379,13 @@ def main():
                     'xy_value': [x, y]
                     }
             inferences = recogniter.predict(input_data)
+            print "%10s, %10s, %10.6f, %10.6f, %5s, %5s" % (
+                    x, y,
+                    inferences['Classifier']['likelihoodsDict']['plus'],
+                    inferences['Classifier']['likelihoodsDict']['minus'],
+                    ftype, inferences['Classifier']['best']['value']
+                    )
 
-            print [x,y], ftype, inferences['best']['value'], inferences['best']['prob']
 
     # # 予測2, fixed-sin
     # import numpy

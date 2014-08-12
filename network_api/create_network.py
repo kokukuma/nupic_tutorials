@@ -42,7 +42,7 @@ TP_PARAMS = {
 }
 
 CLASSIFIER_PARAMS = {
-    "clVerbosity": 2,
+    "clVerbosity": 0,
     'alpha': 0.005,
     "steps": '0'
 }
@@ -81,6 +81,23 @@ def createCategoryEncoder(type_list):
             "fieldname": u"ftype",
             "name": u"ftype",
             "categoryList": type_list,
+            "forced": True,
+            "w": 5,
+            },
+        })
+    return encoder
+
+def createScalarEncoder():
+    encoder = MultiEncoder()
+    encoder.addMultipleEncoders({
+        "y_value": {
+            'clipInput': False,
+            "type": "ScalarEncoder",
+            "fieldname": u"y_value",
+            "name": u"y_value",
+            "maxval": 100.0,
+            "minval": 0.0,
+            'n': 100,
             "w": 21,
             },
         })
