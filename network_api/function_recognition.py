@@ -49,209 +49,193 @@ class function_data(object):
 class FunctionRecogniter():
 
     def __init__(self):
+        from collections import OrderedDict
+
         self.classifier_encoder_list = {}
         self.classifier_input_list = {}
         self.run_number = 0
-        self.prevPredictedColumns = None
+        self.prevPredictedColumns = {}
+
+        # net structure
+        self.net_structure = OrderedDict()
+        self.net_structure['sensor1'] = ['region1']
+        self.net_structure['sensor2'] = ['region2']
+        self.net_structure['sensor3'] = ['region3']
+
+        self.net_structure['region1'] = ['region4']
+        self.net_structure['region2'] = ['region4']
+        self.net_structure['region3'] = ['region4']
+
+        # sensor change params
+        self.sensor_params = {
+                'sensor1': {
+                    'xy_value': {
+                        'maxval': 60.0,
+                        'minval':  0.0
+                        },
+                    },
+                'sensor2': {
+                    'xy_value': {
+                        'maxval': 80.0,
+                        'minval': 20.0
+                        },
+                    },
+                'sensor3': {
+                    'xy_value': {
+                        'maxval': 100.0,
+                        'minval':  40.0
+                        },
+                    },
+                }
+
+        # region change params
+        self.dest_resgion_data = {
+                'region1': {
+                    'TP_PARAMS':{
+                        "cellsPerColumn": 8
+                        },
+                    },
+                'region2': {
+                    'TP_PARAMS':{
+                        "cellsPerColumn": 8
+                        },
+                    },
+                'region3': {
+                    'TP_PARAMS':{
+                        "cellsPerColumn": 8
+                        },
+                    },
+                'region4': {
+                    'SP_PARAMS':{
+                        "inputWidth": 2024 * (8 + 8 + 8)
+                        },
+                    'TP_PARAMS':{
+                        "cellsPerColumn": 16
+                        },
+                    },
+                 }
+
         self._createNetwork()
 
-    def _createNetwork(self):
-        from nupic.algorithms.anomaly import computeAnomalyScore
-        from nupic.engine import Network
-        import create_network as cn
+    def _addRegion(self, src_name, dest_name, params):
         import json
+        from nupic.encoders import MultiEncoder
 
+        sensor     =  src_name
+        sp_name    = "sp_" + dest_name
+        tp_name    = "tp_" + dest_name
+        class_name = "class_" + dest_name
 
-        self.network = Network()
+        try:
+            self.network.regions[sp_name]
+            self.network.regions[tp_name]
+            self.network.regions[class_name]
 
-        # sensor
-        self.network.addRegion("sensor", "py.RecordSensor",
-                json.dumps({"verbosity": 0}))
-        sensor = self.network.regions["sensor"].getSelf()
-        sensor.encoder         = cn.createVectorEncoder()
-        #sensor.disabledEncoder = cn.createCategoryEncoder(['sin', 'linear', 'quad', 'step'])
-        #sensor.disabledEncoder = cn.createCategoryEncoder(['plus', 'minus', 'flat'])
-        #sensor.disabledEncoder = cn.createScalarEncoder()
+            self.network.link(sensor, sp_name, "UniformLink", "")
 
-        sensor.dataSource      = cn.DataBuffer()
+        except Exception as e:
+            # sp
+            self.network.addRegion(sp_name, "py.SPRegion", json.dumps(params['SP_PARAMS']))
+            self.network.link(sensor, sp_name, "UniformLink", "")
 
-        # sp
-        cn.SP_PARAMS["inputWidth"] = sensor.encoder.getWidth()
-        self.network.addRegion("SP", "py.SPRegion", json.dumps(cn.SP_PARAMS))
-        self.network.link("sensor", "SP", "UniformLink", "")
+            # tp
+            self.network.addRegion(tp_name, "py.TPRegion", json.dumps(params['TP_PARAMS']))
+            self.network.link(sp_name, tp_name, "UniformLink", "")
 
-        # tp
-        self.network.addRegion("TP", "py.TPRegion",
-                json.dumps(cn.TP_PARAMS))
+            # class
+            self.network.addRegion( class_name, "py.CLAClassifierRegion", json.dumps(params['CLASSIFIER_PARAMS']))
+            self.network.link(tp_name, class_name, "UniformLink", "")
 
-        self.network.link("SP", "TP", "UniformLink", "")
-        # self.network.link("TP", "SP", "UniformLink", "",
-        #         srcOutput="topDownOut", destInput="topDownIn")
+            encoder = MultiEncoder()
+            encoder.addMultipleEncoders(params['CLASSIFIER_ENCODE_PARAMS'])
+            self.classifier_encoder_list[class_name]  = encoder
+            self.classifier_input_list[class_name]    = tp_name
 
-        # secound sp/tp layer
-        cn.SP_PARAMS["inputWidth"] = sensor.encoder.getWidth()
-        #cn.SP_PARAMS["inputWidth"] = 2024 * 4
-        # cn.SP_PARAMS["columnCount"] = 1000
-        # cn.SP_PARAMS["numActiveColumnsPerInhArea"] = 10
-        self.network.addRegion("SP2", "py.SPRegion", json.dumps(cn.SP_PARAMS))
-        #self.network.link("TP", "SP2", "UniformLink", "")
-        self.network.link("sensor", "SP2", "UniformLink", "")
-
-        # cn.TP_PARAMS["inputWidth"] = 1000
-        cn.TP_PARAMS["cellsPerColumn"] = 8
-        self.network.addRegion("TP2", "py.TPRegion", json.dumps(cn.TP_PARAMS))
-        self.network.link("SP2", "TP2", "UniformLink", "")
-        # self.network.link("TP2", "SP2", "UniformLink", "",
-        #         srcOutput="topDownOut", destInput="topDownIn")
-
-        # # secound sp/tp layer
-        # cn.SP_PARAMS["inputWidth"] = sensor.encoder.getWidth()
-        # #cn.SP_PARAMS["inputWidth"] = 2024 * 4
-        # # cn.SP_PARAMS["columnCount"] = 500
-        # # cn.SP_PARAMS["numActiveColumnsPerInhArea"] = 5
-        # self.network.addRegion("SP3", "py.SPRegion", json.dumps(cn.SP_PARAMS))
-        # #self.network.link("TP2", "SP3", "UniformLink", "")
-        # self.network.link("sensor", "SP3", "UniformLink", "")
-        #
-        # #cn.TP_PARAMS["inputWidth"] = 500
-        # cn.TP_PARAMS["cellsPerColumn"] = 16
-        # self.network.addRegion("TP3", "py.TPRegion", json.dumps(cn.TP_PARAMS))
-        # self.network.link("SP3", "TP3", "UniformLink", "")
-        # # self.network.link("TP2", "SP2", "UniformLink", "",
-        # #         srcOutput="topDownOut", destInput="topDownIn")
-        #
-        # third sp/tp layer
-        #cn.SP_PARAMS["inputWidth"] = 2024 * 4
-        cn.SP_PARAMS["inputWidth"] = 2024 * (8 + 4)
-        # cn.SP_PARAMS["columnCount"] = 500
-        # cn.SP_PARAMS["numActiveColumnsPerInhArea"] = 5
-        self.network.addRegion("SP4", "py.SPRegion", json.dumps(cn.SP_PARAMS))
-        #self.network.link("TP3", "SP4", "UniformLink", "")
-        self.network.link("TP", "SP4", "UniformLink", "")
-        self.network.link("TP2", "SP4", "UniformLink", "")
-        #self.network.link("TP3", "SP4", "UniformLink", "")
-
-        #cn.TP_PARAMS["inputWidth"] = 500
-        cn.TP_PARAMS["cellsPerColumn"] = 16
-        self.network.addRegion("TP4", "py.TPRegion", json.dumps(cn.TP_PARAMS))
-        self.network.link("SP4", "TP4", "UniformLink", "")
-        # self.network.link("TP2", "SP2", "UniformLink", "",
-        #         srcOutput="topDownOut", destInput="topDownIn")
-
-
-
-
-
-        # classifier
-        cn.CLASSIFIER_PARAMS['steps'] = '0'
-        self.network.addRegion("Classifier", "py.CLAClassifierRegion",
-                json.dumps(cn.CLASSIFIER_PARAMS))
-        self.network.link("TP", "Classifier", "UniformLink", "")
-        # self.network.link("sensor", "Classifier", "UniformLink", "",
-        #         srcOutput="categoryOut", destInput="categoryIn")
-        self.classifier_encoder_list["Classifier"]  = cn.createCategoryEncoder(['plus', 'minus', 'flat', 'sin', 'quad', 'step'])
-        self.classifier_input_list["Classifier"]    = "TP"
-
-        cn.CLASSIFIER_PARAMS['steps'] = '0'
-        self.network.addRegion("Classifier_2", "py.CLAClassifierRegion",
-                json.dumps(cn.CLASSIFIER_PARAMS))
-        self.network.link("TP2", "Classifier_2", "UniformLink", "")
-        self.classifier_encoder_list["Classifier_2"]  = cn.createCategoryEncoder(['plus', 'minus', 'flat', 'sin', 'quad', 'step'])
-        self.classifier_input_list["Classifier_2"]    = "TP2"
-        #
-        # cn.CLASSIFIER_PARAMS['steps'] = '0'
-        # self.network.addRegion("Classifier_3", "py.CLAClassifierRegion",
-        #         json.dumps(cn.CLASSIFIER_PARAMS))
-        # self.network.link("TP3", "Classifier_3", "UniformLink", "")
-        # self.classifier_encoder_list["Classifier_3"]  = cn.createCategoryEncoder(['plus', 'minus', 'flat', 'sin', 'quad', 'step'])
-        # self.classifier_input_list["Classifier_3"]    = "TP3"
-        #
-        cn.CLASSIFIER_PARAMS['steps'] = '0'
-        self.network.addRegion("Classifier_4", "py.CLAClassifierRegion",
-                json.dumps(cn.CLASSIFIER_PARAMS))
-        self.network.link("TP4", "Classifier_4", "UniformLink", "")
-        self.classifier_encoder_list["Classifier_4"]  = cn.createCategoryEncoder(['plus', 'minus', 'flat', 'sin', 'quad', 'step'])
-        self.classifier_input_list["Classifier_4"]    = "TP4"
-
-        # cn.CLASSIFIER_PARAMS['steps'] = '1'
-        # self.network.addRegion("Classifier_y", "py.CLAClassifierRegion",
-        #         json.dumps(cn.CLASSIFIER_PARAMS))
-        # self.network.link("TP", "Classifier_y", "UniformLink", "")
-        #
-        # self.classifier_encoder_list["Classifier_y"] = cn.createScalarEncoder()
-        # self.classifier_input_list["Classifier_y"]     = "TP"
-
-        # TODO: 1-3-1構造で, TPのセル数をむやみに増やすことは逆効果になるのでは?
-
-        # initialize
-        self.network.initialize()
+    def _initRegion(self, name):
+        sp_name = "sp_"+ name
+        tp_name = "tp_"+ name
+        class_name = "class_"+ name
 
         # setting sp
-        SP = self.network.regions["SP"]
+        SP = self.network.regions[sp_name]
         SP.setParameter("learningMode", True)
         SP.setParameter("anomalyMode", True)
 
         # setting tp
-        TP = self.network.regions["TP"]
+        TP = self.network.regions[tp_name]
         TP.setParameter("topDownMode", False)
         TP.setParameter("learningMode", True)
         TP.setParameter("inferenceMode", True)
         TP.setParameter("anomalyMode", False)
 
         # classifier regionを定義.
-        classifier = self.network.regions["Classifier"]
+        classifier = self.network.regions[class_name]
         classifier.setParameter('inferenceMode', True)
         classifier.setParameter('learningMode', True)
 
-        # classifier_y = self.network.regions["Classifier_y"]
-        # classifier_y.setParameter('inferenceMode', True)
-        # classifier_y.setParameter('learningMode', True)
 
-        classifier_2 = self.network.regions["Classifier_2"]
-        classifier_2.setParameter('inferenceMode', True)
-        classifier_2.setParameter('learningMode', True)
-        #
-        # classifier_3 = self.network.regions["Classifier_3"]
-        # classifier_3.setParameter('inferenceMode', True)
-        # classifier_3.setParameter('learningMode', True)
-        #
-        classifier_4 = self.network.regions["Classifier_4"]
-        classifier_4.setParameter('inferenceMode', True)
-        classifier_4.setParameter('learningMode', True)
+    def _createNetwork(self):
 
-        # setting secound layer
-        SP2 = self.network.regions["SP2"]
-        SP2.setParameter("learningMode", True)
-        SP2.setParameter("anomalyMode", True)
+        def deepupdate(original, update):
+            """
+            Recursively update a dict.
+            Subdict's won't be overwritten but also updated.
+            """
+            for key, value in original.iteritems():
+                if not key in update:
+                    update[key] = value
+                elif isinstance(value, dict):
+                    deepupdate(value, update[key])
+            return update
 
-        TP2 = self.network.regions["TP2"]
-        TP2.setParameter("topDownMode", False)
-        TP2.setParameter("learningMode", True)
-        TP2.setParameter("inferenceMode", True)
-        TP2.setParameter("anomalyMode", False)
 
-        # # setting secound layer
-        # SP3 = self.network.regions["SP3"]
-        # SP3.setParameter("learningMode", True)
-        # SP3.setParameter("anomalyMode", True)
-        #
-        # TP3 = self.network.regions["TP3"]
-        # TP3.setParameter("topDownMode", False)
-        # TP3.setParameter("learningMode", True)
-        # TP3.setParameter("inferenceMode", True)
-        # TP3.setParameter("anomalyMode", False)
-        #
-        #
-        # setting secound layer
-        SP4 = self.network.regions["SP4"]
-        SP4.setParameter("learningMode", True)
-        SP4.setParameter("anomalyMode", True)
+        from nupic.algorithms.anomaly import computeAnomalyScore
+        from nupic.encoders import MultiEncoder
+        from nupic.engine import Network
+        import create_network as cn
+        import json
+        import itertools
 
-        TP4 = self.network.regions["TP4"]
-        TP4.setParameter("topDownMode", False)
-        TP4.setParameter("learningMode", True)
-        TP4.setParameter("inferenceMode", True)
-        TP4.setParameter("anomalyMode", False)
+
+        self.network = Network()
+
+        # sensor
+        for sensor_name, change_params in self.sensor_params.items():
+            self.network.addRegion(sensor_name, "py.RecordSensor", json.dumps({"verbosity": 0}))
+            sensor = self.network.regions[sensor_name].getSelf()
+
+            # set encoder
+            params = deepupdate(cn.SENSOR_PARAMS, change_params)
+            encoder = MultiEncoder()
+            encoder.addMultipleEncoders( params )
+            sensor.encoder         = encoder
+
+            # set datasource
+            sensor.dataSource      = cn.DataBuffer()
+
+
+        # network
+        print 'create network ...'
+        for source, dest_list in self.net_structure.items():
+            for dest in dest_list:
+                change_params = self.dest_resgion_data[dest]
+                params = deepupdate(cn.PARAMS, change_params)
+
+                if source in self.sensor_params.keys():
+                    sensor = self.network.regions[source].getSelf()
+                    params['SP_PARAMS']['inputWidth'] = sensor.encoder.getWidth()
+                    self._addRegion(source, dest, params)
+                else:
+                    self._addRegion("tp_" + source, dest, params)
+
+        # initialize
+        print 'initializing network ...'
+        self.network.initialize()
+        for name in set( itertools.chain.from_iterable( self.net_structure.values() )):
+            self._initRegion(name)
+
+
+        # TODO: 1-3-1構造で, TPのセル数をむやみに増やすことは逆効果になるのでは?
 
         return
 
@@ -298,19 +282,36 @@ class FunctionRecogniter():
         if 5 in tp_output:
             print input_data['xy_value']
 
+    def print_inferences(self, input_data, inferences):
+        import itertools
 
-    def learn(self, input_data):
+        print "%10s, %10s, %5s" % (
+                int(input_data['xy_value'][0]),
+                int(input_data['xy_value'][1]),
+                input_data['ftype']),
+
+        for name in set( itertools.chain.from_iterable( self.net_structure.values() )):
+            print "%5s," % (inferences['classifier_'+name]['best']['value']),
+
+        for name in set( itertools.chain.from_iterable( self.net_structure.values() )):
+            print "%10.6f," % (inferences['classifier_'+name]['likelihoodsDict'][input_data['ftype']]),
+
+        for name in set( itertools.chain.from_iterable( self.net_structure.values() )):
+            print "%5s," % (str(inferences["anomaly"][name])),
+        print
+
+    def run(self, input_data, learn=True):
         """
         input_data = {'xy_value': [1.0, 2.0], 'ftype': 'sin'}
         """
-        # TODO: learn/predict, やってること同じだから一緒にする.
-        #       学習するかしないか. classifierに値渡すか渡さないか違いのみ.
+        import itertools
 
-        self.enable_learning_mode(True)
+        self.enable_learning_mode(learn)
         self.run_number += 1
 
         # calc encoder, SP, TP
-        self.network.regions["sensor"].getSelf().dataSource.push(input_data)
+        for sensor_name in self.sensor_params.keys():
+            self.network.regions[sensor_name].getSelf().dataSource.push(input_data)
         self.network.run(1)
         #self.layer_output(input_data)
         #self.debug(input_data)
@@ -318,67 +319,16 @@ class FunctionRecogniter():
 
         # learn classifier
         inferences = {}
-        inferences['Classifier']   = self._learn_classifier_multi("Classifier", actValue=input_data['ftype'], pstep=0)
-        inferences['Classifier_2']   = self._learn_classifier_multi("Classifier_2", actValue=input_data['ftype'], pstep=0)
-        # inferences['Classifier_3']   = self._learn_classifier_multi("Classifier_3", actValue=input_data['ftype'], pstep=0)
-        inferences['Classifier_4']   = self._learn_classifier_multi("Classifier_4", actValue=input_data['ftype'], pstep=0)
-        #inferences['Classifier_y'] = self._learn_classifier_multi("Classifier_y", input_data['xy_value'][1], pstep=1)
+        for name in set( itertools.chain.from_iterable( self.net_structure.values() )):
+            class_name = "class_" + name
+            inferences['classifier_'+name]   = self._learn_classifier_multi(class_name, actValue=input_data['ftype'], pstep=0)
 
         # anomaly
         inferences["anomaly"] = self._calc_anomaly()
 
-        # print input_data['xy_value'], inferences['Classifier_y']['best']['value'], inferences['Classifier_y']['best']['prob']
-        # print 'actual value: ',input_data['xy_value'],
-        # print input_data['ftype'],
-        # print inferences['Classifier']['best']['value'],
-        # print inferences["anomaly"],
-        # print dict(inferences['Classifier']['likelihoodsDict'])
-
-        print "%10s, %10s, %5s, %5s, %5s,%5s, %5s, %10.6f, %10.6f, %10.6f , %10.6f" % (
-                int(input_data['xy_value'][0]),
-                int(input_data['xy_value'][1]),
-                input_data['ftype'],
-                inferences['Classifier']['best']['value'],
-                'no',
-                inferences['Classifier_2']['best']['value'],
-                # inferences['Classifier_3']['best']['value'],
-                inferences['Classifier_4']['best']['value'],
-                inferences['Classifier']['likelihoodsDict'][input_data['ftype']],
-                0.0,
-                inferences['Classifier_2']['likelihoodsDict'][input_data['ftype']],
-                # inferences['Classifier_3']['likelihoodsDict'][input_data['ftype']],
-                inferences['Classifier_4']['likelihoodsDict'][input_data['ftype']]
-                ),
-        print inferences["anomaly"]
 
         return inferences
 
-
-    def predict(self, input_data):
-        # calc encoder, SP, TP
-        self.enable_learning_mode(False)
-        self.run_number += 1
-
-        self.network.regions["sensor"].getSelf().dataSource.push(input_data)
-        self.network.run(1)
-        # if input_data["xy_value"] == [50.0, 50.0]:
-        # #if input_data["xy_value"][0] == 10.0:
-        #     self.layer_output(input_data)
-        #self.layer_output(input_data)
-        #self.debug(input_data)
-
-        # learn classifier
-        inferences = {}
-        inferences['Classifier']   = self._learn_classifier_multi("Classifier", actValue=None, pstep=0)
-        inferences['Classifier_2']   = self._learn_classifier_multi("Classifier_2", actValue=None, pstep=0)
-        # inferences['Classifier_3']   = self._learn_classifier_multi("Classifier_3", actValue=None, pstep=0)
-        inferences['Classifier_4']   = self._learn_classifier_multi("Classifier_4", actValue=None, pstep=0)
-        #inferences['Classifier_y'] = self._learn_classifier_multi("Classifier_y", actValue=None, pstep=1)
-
-        # anomaly
-        inferences["anomaly"] = self._calc_anomaly()
-
-        return inferences
 
     def _learn_classifier_multi(self, region_name, actValue=None, pstep=0):
 
@@ -437,15 +387,20 @@ class FunctionRecogniter():
 
     def _calc_anomaly(self):
         import copy
+        import itertools
         from nupic.algorithms.anomaly import computeAnomalyScore
 
-        anomalyScore = None
-        sp_bottomUpOut = self.network.regions["SP"].getOutputData("bottomUpOut").nonzero()[0]
-        if self.prevPredictedColumns is not None:
-            anomalyScore = computeAnomalyScore(sp_bottomUpOut, self.prevPredictedColumns)
-        #topdown_predict = self.network.regions["TP"].getSelf()._tfdr.topDownCompute().copy().nonzero()[0]
-        topdown_predict = self.network.regions["TP"].getSelf()._tfdr.topDownCompute().nonzero()[0]
-        self.prevPredictedColumns = copy.deepcopy(topdown_predict)
+        score = 0
+        anomalyScore = {}
+        for name in set( itertools.chain.from_iterable( self.net_structure.values() )):
+            sp_bottomUpOut = self.network.regions["sp_"+name].getOutputData("bottomUpOut").nonzero()[0]
+            if self.prevPredictedColumns.has_key(name):
+                score = computeAnomalyScore(sp_bottomUpOut, self.prevPredictedColumns[name])
+            #topdown_predict = self.network.regions["TP"].getSelf()._tfdr.topDownCompute().copy().nonzero()[0]
+            topdown_predict = self.network.regions["tp_"+name].getSelf()._tfdr.topDownCompute().nonzero()[0]
+            self.prevPredictedColumns[name] = copy.deepcopy(topdown_predict)
+
+            anomalyScore[name] = score
 
         return anomalyScore
 
@@ -453,25 +408,16 @@ class FunctionRecogniter():
         """
         reset sequence
         """
-        self.network.regions["TP"].getSelf().resetSequenceStates()
-        self.network.regions["TP2"].getSelf().resetSequenceStates()
-        # self.network.regions["TP3"].getSelf().resetSequenceStates()
-        self.network.regions["TP4"].getSelf().resetSequenceStates()
+        import itertools
+        for name in set( itertools.chain.from_iterable( self.net_structure.values() )):
+            self.network.regions["tp_"+name].getSelf().resetSequenceStates()
 
     def enable_learning_mode(self, enable):
-        self.network.regions["SP"].setParameter("learningMode", enable)
-        self.network.regions["TP"].setParameter("learningMode", enable)
-        self.network.regions["SP2"].setParameter("learningMode", enable)
-        self.network.regions["TP2"].setParameter("learningMode", enable)
-        # self.network.regions["SP3"].setParameter("learningMode", enable)
-        # self.network.regions["TP3"].setParameter("learningMode", enable)
-        self.network.regions["SP4"].setParameter("learningMode", enable)
-        self.network.regions["TP4"].setParameter("learningMode", enable)
-
-        self.network.regions["Classifier"].setParameter("learningMode", enable)
-        self.network.regions["Classifier_2"].setParameter("learningMode", enable)
-        # self.network.regions["Classifier_3"].setParameter("learningMode", enable)
-        self.network.regions["Classifier_4"].setParameter("learningMode", enable)
+        import itertools
+        for name in set( itertools.chain.from_iterable( self.net_structure.values() )):
+            self.network.regions["sp_"+name].setParameter("learningMode", enable)
+            self.network.regions["tp_"+name].setParameter("learningMode", enable)
+            self.network.regions["class_"+name].setParameter("learningMode", enable)
 
 def main():
 
@@ -488,7 +434,10 @@ def main():
                         'xy_value': [x, y],
                         'ftype': ftype
                         }
-                inferences = recogniter.learn(input_data)
+                inferences = recogniter.run(input_data, learn=True)
+
+                # print
+                recogniter.print_inferences(input_data, inferences)
 
             recogniter.reset()
 
@@ -496,9 +445,7 @@ def main():
     # TODO: 合わない原因を考える.
     # TODO: 本当にclassifierの計算だけ別途行う必要があるのか? runを読んで調べる.
     # TODO: TP->SPと接続したら, 接続元はcellなのかcolumnなのか.
-
     # TODO: 複数の層対応
-
 
     # 予測1
     for ftype in fd.function_list.keys():
@@ -506,33 +453,14 @@ def main():
         data = fd.get_data(ftype)
         for x, y in data:
             input_data = {
-                    'xy_value': [x, y]
+                    'xy_value': [x, y],
+                    'ftype': None
                     }
-            inferences = recogniter.predict(input_data)
-            # print "%10s, %10s, %10.6f, %10.6f, %5s, %5s" % (
-            #         x, y,
-            #         inferences['Classifier']['likelihoodsDict']['plus'],
-            #         inferences['Classifier']['likelihoodsDict']['minus'],
-            #         ftype, inferences['Classifier']['best']['value']
-            #          )
+            inferences = recogniter.run(input_data, learn=False)
 
-            print "%10s, %10s, %5s, %5s, %5s,%5s, %5s, %10.6f, %10.6f, %10.6f,%10.6f " % (
-                    int(input_data['xy_value'][0]),
-                    int(input_data['xy_value'][1]),
-                    ftype,
-                    inferences['Classifier']['best']['value'],
-                    'no',
-                    inferences['Classifier_2']['best']['value'],
-                    # inferences['Classifier_3']['best']['value'],
-                    inferences['Classifier_4']['best']['value'],
-                    inferences['Classifier']['likelihoodsDict'][ftype],
-                    0.0,
-                    inferences['Classifier_2']['likelihoodsDict'][ftype],
-                    # inferences['Classifier_3']['likelihoodsDict'][ftype],
-                    inferences['Classifier_4']['likelihoodsDict'][ftype]
-                    ),
-            print inferences["anomaly"]
-
+            # print
+            input_data['ftype'] = ftype
+            recogniter.print_inferences(input_data, inferences)
 
     # # 予測2, fixed-sin
     # import numpy
