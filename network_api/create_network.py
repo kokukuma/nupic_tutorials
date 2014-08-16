@@ -21,7 +21,7 @@ SP_PARAMS = {
 TP_PARAMS = {
     "verbosity": 0,
     "columnCount": 2024,
-    "cellsPerColumn": 32,
+    "cellsPerColumn": 4,
     # "cellsPerColumn": 70,
     #"cellsPerColumn": 100,
     "inputWidth": 2024,
@@ -31,8 +31,9 @@ TP_PARAMS = {
     "maxSynapsesPerSegment": 32,
     "maxSegmentsPerCell": 128,
     "initialPerm": 0.21,
-    "permanenceInc": 0.1,
-    "permanenceDec": 0.0001,
+    "permanenceInc": 0.2,
+    "permanenceDec": 0.1,
+    #"permanenceDec": 0.0001,
     "globalDecay": 0.0,
     "maxAge": 0,
     "minThreshold": 9,
@@ -62,7 +63,7 @@ def createVectorEncoder():
             "clipInput": True,
             "type": "VectorEncoderOPF",
             "dataType": "float",
-            "n": 100,
+            "n": 200,
             "w": 21,
             "length": 2,
             "fieldname": u"xy_value",
@@ -82,7 +83,7 @@ def createCategoryEncoder(type_list):
             "name": u"ftype",
             "categoryList": type_list,
             "forced": True,
-            "w": 5,
+            "w": 7,
             },
         })
     return encoder
