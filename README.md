@@ -112,7 +112,8 @@ python run_class.py
   + OPFを使わず, network apiを使ってみる.
   + [ここ](https://github.com/numenta/nupic/tree/master/examples/network)を参考にしている.
   + OPFの劣化コピーになってしまったが, 自前のネットワークを作ることは出来るようになった.
-  + やってみたタスクは, 分類.
+  + やってみたタスクは, 分類と予測の２つ.
+  + でかくなりすぎたので, nupic_function_recognition に移動する.
 
 + 実行方法
 ```
