@@ -96,10 +96,6 @@ python audiostream.py
   + [波形を見る](http://aidiary.hatenablog.com/entry/20110607/1307449007)
   + [離散フーリエ変換](http://aidiary.hatenablog.com/entry/20110611/1307751369)
   + [高速フーリエ変換](http://aidiary.hatenablog.com/entry/20110514/1305377659)
-```
-cd audiostream
-python sin_pyaudio.py
-```
 
 ### classification
 + OPFを使って, 分類をしてみる.
@@ -116,7 +112,7 @@ python run_class.py
   + OPFを使わず, network apiを使ってみる.
   + [ここ](https://github.com/numenta/nupic/tree/master/examples/network)を参考にしている.
   + OPFの劣化コピーになってしまったが, 自前のネットワークを作ることは出来るようになった.
-  + やってみたタスクは, 分類と予測の２つ.
+  + やってみたタスクは, 分類.
 
 + 実行方法
 ```
